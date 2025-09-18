@@ -46,7 +46,7 @@
             <h3 class="pokemon-card-title">{{ p.name }}</h3>
           </div>
           <div class="card-actions">
-            <button class="icon-btn" @click="editarPokemon(p)" title="Editar">✏️</button>
+            <button class="icon-btn danger" @click="editarPokemon(p)" title="Editar">✏️</button>
             <button class="icon-btn danger" @click="eliminarPokemon(p.id)" title="Eliminar">🗑️</button>
           </div>
         </header>
