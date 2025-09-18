@@ -31,7 +31,6 @@
         min="0.1"
         max="3"
         v-model.number="form.attack_modifier"
-        @blur="normalize('attack_modifier')"
         required
         placeholder="1.0"
       />
@@ -42,13 +41,11 @@
       <label class="form-label" for="def">Modificador Defensa ×</label>
       <input
         id="def"
-        class="form-control"
         type="number"
         step="0.1"
         min="0.1"
         max="3"
         v-model.number="form.defense_modifier"
-        @blur="normalize('defense_modifier')"
         required
         placeholder="1.0"
       />
@@ -65,7 +62,6 @@
         min="0.1"
         max="3"
         v-model.number="form.speed_modifier"
-        @blur="normalize('speed_modifier')"
         required
         placeholder="1.0"
       />
