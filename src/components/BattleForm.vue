@@ -5,9 +5,23 @@
     @submit.prevent="onSubmit"
     novalidate
   >
+
+    <!-- Nombre (full width) -->
+    <div class="field field--full">
+      <label for="name">Nombre (Opcional)</label>
+      <input
+        id="name"
+        v-model.trim="form.name"
+        type="text"
+        maxlength="100"
+        autocomplete="off"
+        placeholder="Nombre del combate"
+      />
+    </div>
+
     <!-- Pokémon A -->
     <div class="field">
-      <label for="pokeA">Pokémon A</label>
+      <label for="pokeA">Pokémon A *</label>
       <select
         id="pokeA"
         ref="selA"
@@ -36,7 +50,7 @@
 
     <!-- Pokémon B -->
     <div class="field">
-      <label for="pokeB">Pokémon B</label>
+      <label for="pokeB">Pokémon B *</label>
       <select
         id="pokeB"
         ref="selB"
@@ -57,7 +71,7 @@
 
     <!-- Escenario -->
     <div class="field field--full">
-      <label for="scenario">Escenario</label>
+      <label for="scenario">Escenario *</label>
       <select
         id="scenario"
         v-model.number="form.scenario"
@@ -72,17 +86,17 @@
 
     <!-- CRON -->
     <div class="field field--full">
-      <label for="cron">Programar CRON (opcional)</label>
+      <label for="cron">Programar CRON Formato de 5 campos.(opcional)</label>
       <input
         id="cron"
         ref="cronEl"
         type="text"
         v-model.trim="form.scheduled_cron"
-        placeholder="Vacío = pendiente. Formato CRON de 5 campos."
+        placeholder="Si lo dejas vacío el estado será 'pendiente'."
         inputmode="text"
         autocomplete="off"
       />
-      <small class="form-help">Ej: <code>*/5 * * * *</code> cada 5 min</small>
+      <small class="form-help">Ej: <code>*/5 * * * *</code> (para ejecutarse cada 5 min)</small>
     </div>
 
     <!-- Acciones -->
@@ -114,6 +128,7 @@ export default {
         pokemon_b: null,
         scenario: null,
         scheduled_cron: "",
+        name: null,
       },
     };
   },
@@ -132,8 +147,9 @@ export default {
               pokemon_b: b.pokemon_b,
               scenario: b.scenario,
               scheduled_cron: b.scheduled_cron || "",
+              name: b.name || null,
             }
-          : { id: null, pokemon_a: null, pokemon_b: null, scenario: null, scheduled_cron: "" };
+          : { id: null, pokemon_a: null, pokemon_b: null, scenario: null, scheduled_cron: "", name: null };
         this.$nextTick(() => {
           this.updateCustomValidity();
           this.$emit("valid", this.isValid);
@@ -183,6 +199,7 @@ export default {
           pokemon_a: this.form.pokemon_a,
           pokemon_b: this.form.pokemon_b,
           scenario: this.form.scenario,
+          name: this.form.name || null,
         };
 
         let battleId = this.form.id;
