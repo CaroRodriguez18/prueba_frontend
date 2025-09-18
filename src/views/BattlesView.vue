@@ -129,7 +129,7 @@
       :showFooter="true"
       primary-label="Cerrar"
       secondary-label="Ver detalle"
-      :maxWidth="'900px'"
+      :maxWidth="'1800px'"
       @primary="closeLiveAndModal"
       @secondary="goDetail(live.id)"
       @close="closeStreamsOnly"
@@ -150,27 +150,32 @@
             </div>
           </header>
 
-          <dl class="stats">
-            <div class="stat">
-              <dt>{{ live.a?.name || 'A' }}</dt>
-              <dd>
-                <div class="bar">
-                  <div class="fill hp" :style="{ width: pct(live.hpA, live.maxA) }"></div>
+
+          <div class="hp-stats">
+            <!-- A -->
+            <div class="hp-stat">
+              <div class="hp-name">{{ live.a?.name || 'A' }}</div>
+              <div class="hp-row">
+                <div class="hp-bar">
+                  <div class="hp-fill" :style="{ width: pct(live.hpA, live.maxA) }"></div>
                 </div>
-                <span class="val">{{ live.hpA ?? '—' }}/{{ live.maxA ?? '—' }}</span>
-              </dd>
+                <span class="hp-val">{{ live.hpA ?? '—' }}/{{ live.maxA ?? '—' }}</span>
+              </div>
             </div>
 
-            <div class="stat">
-              <dt>{{ live.b?.name || 'B' }}</dt>
-              <dd>
-                <div class="bar">
-                  <div class="fill hp" :style="{ width: pct(live.hpB, live.maxB) }"></div>
+            <!-- B -->
+            <div class="hp-stat">
+              <div class="hp-name">{{ live.b?.name || 'B' }}</div>
+              <div class="hp-row">
+                <div class="hp-bar">
+                  <div class="hp-fill" :style="{ width: pct(live.hpB, live.maxB) }"></div>
                 </div>
-                <span class="val">{{ live.hpB ?? '—' }}/{{ live.maxB ?? '—' }}</span>
-              </dd>
+                <span class="hp-val">{{ live.hpB ?? '—' }}/{{ live.maxB ?? '—' }}</span>
+              </div>
             </div>
-          </dl>
+          </div>
+
+
         </article>
 
         <!-- Panel Log -->
@@ -658,5 +663,56 @@ export default {
   text-align: center;
   opacity: .7;
 }
+.hp-stats{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
 
+.hp-stat{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hp-name{
+  font-weight: 700;
+  color: #15586c;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hp-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hp-bar{
+  position: relative;
+  flex: 1 1 auto;
+  height: 12px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.hp-fill{
+  position: absolute;
+  inset: 0;              /* ocupa todo el alto */
+  width: 0%;             /* se actualiza por :style */
+  border-radius: 999px;
+  background: linear-gradient(90deg,#fb7185,#ec4899,#8b5cf6);
+  transition: width .25s ease;
+}
+
+.hp-val{
+  min-width: 60px;
+  text-align: right;
+  font-weight: 700;
+  color: #374151;
+}
 </style>
