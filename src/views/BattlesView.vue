@@ -64,7 +64,13 @@
           </div>
 
           <div class="card-actions">
-            <button class="icon-btn danger" @click="editBattle(b)" title="Editar">✏️</button>
+            <button 
+              :class="b.status!=='RUNNING' ? 'icon-btn danger' : 'icon-btn primary'"
+              :disabled="b.status==='RUNNING'"
+              @click="editBattle(b)"
+              title="Editar
+            ">✏️
+              </button>
             <button class="icon-btn danger" @click="goDetail(b.id)" title="Detalle">🔎</button>
             <button
               :class="b.status!=='RUNNING' ? 'icon-btn danger' : 'icon-btn primary'"
