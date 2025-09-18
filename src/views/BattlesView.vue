@@ -47,7 +47,12 @@
     <div :class="['cards-stack', { loading }]">
       <article v-for="b in items" :key="b.id" class="pokemon-card">
         <div class="accent"></div>
-
+        <dl class="stats stats--meta">
+          <div class="stat" v-if="b?.name">
+            <dt>Nombre batalla:</dt>
+              <dd><span class="stat-badge positive">{{ b.name }}</span></dd>
+          </div>
+        </dl>
         <header class="pokemon-card-header">
           <div class="avatar"><span class="pokeball">{{ b.id }}</span></div>
 
@@ -59,10 +64,10 @@
           </div>
 
           <div class="card-actions">
-            <button class="icon-btn" @click="editBattle(b)" title="Editar">✏️</button>
-            <button class="icon-btn" @click="goDetail(b.id)" title="Detalle">🔎</button>
+            <button class="icon-btn danger" @click="editBattle(b)" title="Editar">✏️</button>
+            <button class="icon-btn danger" @click="goDetail(b.id)" title="Detalle">🔎</button>
             <button
-              class="icon-btn"
+              :class="b.status!=='RUNNING' ? 'icon-btn danger' : 'icon-btn primary'"
               :disabled="b.status==='RUNNING'"
               @click="executeBattle(b)"
               title="Ejecutar"
@@ -129,15 +134,14 @@
       :showFooter="true"
       primary-label="Cerrar"
       secondary-label="Ver detalle"
-      :maxWidth="'1800px'"
+      :maxWidth="'900px'"
       @primary="closeLiveAndModal"
       @secondary="goDetail(live.id)"
       @close="closeStreamsOnly"
     >
       <div class="live-grid">
-        <!-- Panel HP -->
-        <article class="pokemon-card">
-          <div class="accent"></div>
+        <!-- Panel Log -->
+        <article class="pokemon-card" :maxWidth="'900px'">
           <header class="pokemon-card-header">
             <div class="avatar"><span class="pokeball">{{ live.id ?? '—' }}</span></div>
             <div class="title-wrap">
@@ -145,43 +149,10 @@
                 {{ live.a?.name || '—' }} <span class="vs">vs</span> {{ live.b?.name || '—' }}
               </h3>
             </div>
-            <div class="card-actions">
-              <span class="stat-badge" :class="statusClass(live.status)">{{ statusLabel(live.status) }}</span>
-            </div>
           </header>
+            <div class="accent"></div>
+            <h3 class="pokemon-card-title" style="margin-bottom:8px;">Logs</h3>
 
-
-          <div class="hp-stats">
-            <!-- A -->
-            <div class="hp-stat">
-              <div class="hp-name">{{ live.a?.name || 'A' }}</div>
-              <div class="hp-row">
-                <div class="hp-bar">
-                  <div class="hp-fill" :style="{ width: pct(live.hpA, live.maxA) }"></div>
-                </div>
-                <span class="hp-val">{{ live.hpA ?? '—' }}/{{ live.maxA ?? '—' }}</span>
-              </div>
-            </div>
-
-            <!-- B -->
-            <div class="hp-stat">
-              <div class="hp-name">{{ live.b?.name || 'B' }}</div>
-              <div class="hp-row">
-                <div class="hp-bar">
-                  <div class="hp-fill" :style="{ width: pct(live.hpB, live.maxB) }"></div>
-                </div>
-                <span class="hp-val">{{ live.hpB ?? '—' }}/{{ live.maxB ?? '—' }}</span>
-              </div>
-            </div>
-          </div>
-
-
-        </article>
-
-        <!-- Panel Log -->
-        <article class="pokemon-card">
-          <div class="accent"></div>
-          <h3 class="pokemon-card-title" style="margin-bottom:8px;">Log</h3>
           <pre class="live-log" ref="liveLog">{{ live.log || 'Esperando eventos…' }}</pre>
         </article>
       </div>
@@ -211,9 +182,7 @@ export default {
       STATUS_OPTIONS: [
         { value: 'PENDING',   label: 'Pendiente' },
         { value: 'SCHEDULED', label: 'Programado' },
-        // { value: 'RUNNING',   label: 'En ejecución' },
         { value: 'FINISHED',  label: 'Finalizado' },
-        // { value: 'FAILED',    label: 'Fallido' },
       ],
       page: 1,
       pageSize: 10,
@@ -245,6 +214,12 @@ export default {
         _sse: null,                // EventSource
         _poll: null,               // setInterval
         _etag: null,               // If-None-Match (opcional)
+
+        // Ritmo de log línea por línea
+        _queue: [],                // líneas pendientes
+        _carry: '',                // fragmento sin "\n" aún
+        _ticker: null,             // setInterval del ticker
+        speedMs: 500               // medio segundo por línea
       },
     };
   },
@@ -416,7 +391,13 @@ export default {
       this.live.maxB = b.hp ?? 100;
       this.live.hpA  = this.live.maxA;
       this.live.hpB  = this.live.maxB;
-      this.live.log  = (battle.log || '').trim();
+
+      // Reinicia ticker/colas y encola el log inicial para que salga a ritmo
+      this.live.log  = '';
+      this.live._queue = [];
+      this.live._carry = '';
+      this.stopTicker();
+      this.enqueueNewLog((battle.log || '').trim());
 
       this.live.open = true;
     },
@@ -451,17 +432,23 @@ export default {
 
     onEvent(ev) {
       if (ev.log_append) {
-        this.live.log += (this.live.log ? '\n' : '') + ev.log_append;
-        this.$nextTick(this.scrollLogBottom);
+        this.enqueueNewLog(ev.log_append);
       }
       if (typeof ev.hp_a === 'number') this.live.hpA = ev.hp_a;
       if (typeof ev.hp_b === 'number') this.live.hpB = ev.hp_b;
       if (ev.status) this.live.status = ev.status;
 
-      // Al terminar: cortar streams y refrescar lista, PERO mantener el modal abierto
+      // Al terminar: cortar streams y refrescar lista, PERO esperar a que se vacíe la cola
       if (ev.type === 'done' || /FINISHED|FAILED/i.test(this.live.status || '')) {
-        this.closeStreamsOnly();
-        this.reload();
+        const stopSoon = () => {
+          if (!this.live._queue.length && !this.live._carry) {
+            this.closeStreamsOnly();
+            this.reload();
+          } else {
+            setTimeout(stopSoon, 300);
+          }
+        };
+        stopSoon();
       }
     },
 
@@ -494,6 +481,7 @@ export default {
       try { this.live._sse?.close(); } catch { /* intentionally ignored */ }
       this.live._sse = null;
       this.stopPolling();
+      this.stopTicker();
     },
 
     closeLiveAndModal() {
@@ -505,9 +493,8 @@ export default {
     updateFromPayload(data) {
       if (!data) return;
 
-      if (typeof data.log === 'string' && data.log.length !== (this.live.log?.length || 0)) {
-        this.live.log = data.log;
-        this.$nextTick(this.scrollLogBottom);
+      if (typeof data.log === 'string') {
+        this.enqueueDeltaFromFullLog(data.log);
       }
       if (data.status) this.live.status = data.status;
 
@@ -516,16 +503,83 @@ export default {
       if (typeof hpA === 'number') this.live.hpA = hpA;
       if (typeof hpB === 'number') this.live.hpB = hpB;
 
-      // Si terminó, liberamos streams y refrescamos cards (modal queda abierto)
+      // Si terminó, esperar a que la cola termine
       if (/FINISHED|FAILED/i.test(this.live.status || '')) {
-        this.closeStreamsOnly();
-        this.reload();
+        const stopSoon = () => {
+          if (!this.live._queue.length && !this.live._carry) {
+            this.closeStreamsOnly();
+            this.reload();
+          } else {
+            setTimeout(stopSoon, 300);
+          }
+        };
+        stopSoon();
       }
     },
 
     scrollLogBottom() {
       const el = this.$refs.liveLog;
       if (el && el.scrollTo) el.scrollTo({ top: el.scrollHeight });
+    },
+
+    /* ===== Ritmado de log (500ms/linea) ===== */
+    startTicker() {
+      if (this.live._ticker) return;
+      this.live._ticker = setInterval(() => {
+        if (!this.live._queue.length && !this.live._carry) {
+          this.stopTicker();
+          return;
+        }
+        if (this.live._queue.length === 0 && this.live._carry) {
+          this.live._queue.push(this.live._carry);
+          this.live._carry = '';
+        }
+        const next = this.live._queue.shift();
+        if (next == null) return;
+
+        // Detectar líneas con info de HP (ajusta regex a tu log)
+        const matchA = next.match(/HP\s+(\w+):\s*(\d+)\/(\d+)/i);
+        if (matchA && matchA[1] === this.live.a?.name) this.live.hpA = Number(matchA[2]);
+        const matchB = next.match(/HP\s+(\w+):\s*(\d+)\/(\d+)/i);
+        if (matchB && matchB[1] === this.live.b?.name) this.live.hpB = Number(matchB[2]);
+
+        this.live.log += (this.live.log ? '\n' : '') + next;
+        this.$nextTick(this.scrollLogBottom);
+      }, this.live.speedMs);
+    },
+
+    stopTicker() {
+      if (this.live._ticker) {
+        clearInterval(this.live._ticker);
+        this.live._ticker = null;
+      }
+    },
+
+    enqueueNewLog(chunk) {
+      if (typeof chunk !== 'string' || !chunk.length) return;
+
+      const text = this.live._carry + chunk;
+      const parts = text.split('\n');
+
+      for (let i = 0; i < parts.length - 1; i++) {
+        const line = parts[i].replace(/\r$/, '').trimEnd();
+        if (line) this.live._queue.push(line);
+      }
+
+      this.live._carry = parts[parts.length - 1];
+      this.startTicker();
+    },
+
+    enqueueDeltaFromFullLog(newFullLog) {
+      if (typeof newFullLog !== 'string') return;
+
+      const oldShown = this.live.log;
+      const alreadyPending = this.live._queue.join('\n');
+      const base = oldShown + (alreadyPending ? ('\n' + alreadyPending) : '') + (this.live._carry || '');
+      if (newFullLog.length <= base.length) return;
+
+      const delta = newFullLog.slice(base.length);
+      this.enqueueNewLog(delta);
     },
 
     /* ================= UI helpers ================= */
@@ -605,20 +659,38 @@ export default {
   overflow-y: auto;
   border: 1px solid rgba(255,255,255,0.08);
 }
-.live-grid{
-  display:grid;
-  grid-template-columns: minmax(0,1fr);
-  gap:18px;
+.live-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 90vh; /* casi todo el alto */
+  max-width: 900px;
+  width: 100%;
 }
+
+.pokemon-card {
+  flex: 1 1 auto;   /* que crezca para ocupar espacio */
+  display: flex;
+  flex-direction: column;
+}
+
+.live-log {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #0b1220;
+  color: #e5e7eb;
+  border: 1px solid rgba(255,255,255,0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  white-space: pre-wrap;
+  margin-top: 0.5rem;
+}
+
 @media (min-width: 900px){
   .live-grid{ grid-template-columns: 420px minmax(0,1fr); }
 }
-.live-log{
-  height: 56vh; overflow:auto; border-radius:10px; padding:12px 14px;
-  background:#0b1220; color:#e5e7eb; border:1px solid rgba(255,255,255,.08);
-  white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
+
 
 /* Meta grid */
 .stats--meta .stat{
@@ -653,7 +725,7 @@ export default {
 .pokemon-card{ margin: 0; }
 
 /* Un poco más de separación en pantallas grandes */
-@media (min-width: 1200px){
+@media (min-width: 900px){
   .cards-stack{ gap: 26px; }
 }
 
